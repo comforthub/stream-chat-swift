@@ -187,7 +187,8 @@ public struct AIConversationView<Message: Identifiable, MessageContent: View, Fo
         loadOlder loadOlderMessages: (@MainActor () async -> Void)?,
         height: CGFloat
     ) -> some View {
-        LazyVStack(spacing: layout.spacingXs) {
+        // comforthub: every turn is built when the conversation opens, so cards load at once and keep their state.
+        VStack(spacing: layout.spacingXs) {
             if let loadOlderMessages {
                 OlderMessagesLoadingView(firstTurnID: turns.first.map { AnyHashable($0.id) }, load: loadOlderMessages)
             }
