@@ -35,6 +35,11 @@ public extension AIUIHosting {
     func component(named name: String) -> (any AIUIComponent)? {
         components.first { $0.name == name }
     }
+
+    /// Sends what the person did, and says so if it couldn't be sent. By default it can't tell.
+    func send(_ action: AIUIAction, failed: @escaping @MainActor () -> Void) {
+        send(action)
+    }
 }
 
 /// The generated UI of one conversation: the renderers of the formats it reads, the app's
@@ -111,6 +116,12 @@ public final class AIUIHost<Renderers: AIUIRendererList>: AIUIHosting, Observabl
     /// Sends what the person did to the agent, after everything sent before it, so the agent gets
     /// a reply's actions in the order they happened.
     public func send(_ action: AIUIAction) {
+        send(action) {}
+    }
+
+    /// Sends what the person did, and calls `failed` when the app's `send` throws, such as when
+    /// the app refused it, so the UI can let the person try again.
+    public func send(_ action: AIUIAction, failed: @escaping @MainActor () -> Void) {
         let previous = lastSend
         lastSend = Task { @MainActor in
             await previous?.value
@@ -118,6 +129,7 @@ public final class AIUIHost<Renderers: AIUIRendererList>: AIUIHosting, Observabl
                 try await sendAction(action)
             } catch {
                 log.error("Couldn't send what the person did in a reply's UI", error: error)
+                failed()
             }
         }
     }

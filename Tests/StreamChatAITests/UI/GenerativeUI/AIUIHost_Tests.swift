@@ -425,6 +425,18 @@ final class AIUIHost_Tests: XCTestCase {
         XCTAssertNil(store.states["m1"])
     }
 
+    func testARefusedActionSaysItFailed() async {
+        struct Refused: Error {}
+        let host = AIUIHost(renderers: { TestRenderer() }, send: { _ in throw Refused() })
+        let failed = expectation(description: "failed")
+
+        host.send(AIUIAction(messageID: "m1", format: .openUI, name: "confirm_booking", label: "Book")) {
+            failed.fulfill()
+        }
+
+        await fulfillment(of: [failed], timeout: 2)
+    }
+
     func testCapabilitiesListEachFormatWithTheAppsToolsAndTheAppsComponents() throws {
         let host = AIUIHost(components: [placeCard], tools: [Tool(name: "list_events"), Tool(name: "add_reminder")]) {
             TestRenderer()

@@ -136,6 +136,16 @@ enum AppActionLock {
         context.runtime.store.set(key, .string(fingerprint(context.runtime.response)))
     }
 
+    // Lets every waiting button of the reply be tapped again.
+    @MainActor
+    static func release(_ runtime: OpenUIRuntime) {
+        for key in runtime.store.snapshot.keys where key.hasPrefix(prefix) {
+            runtime.store.set(key, nil)
+        }
+    }
+
+    private static let prefix = "__sent_"
+
     static func isAppAction(_ action: OpenUIValue?) -> Bool {
         guard case .object(let object)? = action, object["steps"] == nil,
               let type = object["type"]?.stringValue else { return false }
@@ -144,7 +154,7 @@ enum AppActionLock {
 
     @MainActor
     private static func key(_ context: ComponentContext) -> String? {
-        context.statementId.map { "__sent_" + $0 }
+        context.statementId.map { prefix + $0 }
     }
 
     // FNV-1a of the reply's program: stable across launches, unlike `hashValue`.

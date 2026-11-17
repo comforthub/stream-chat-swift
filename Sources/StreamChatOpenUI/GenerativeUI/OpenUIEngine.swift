@@ -175,7 +175,11 @@ final class OpenUIEngine: AIUIEngine {
             }
         }
         let label = event.label.isEmpty ? L10n.Action.untitled : event.label
-        host.send(AIUIAction(messageID: messageID, format: .openUI, name: event.type, label: label, payload: payload))
+        let action = AIUIAction(messageID: messageID, format: .openUI, name: event.type, label: label, payload: payload)
+        // A button that waits on an action for the app tries again when the app refused it.
+        host.send(action) { [weak self] in
+            self?.runtimes[messageID].map(AppActionLock.release)
+        }
     }
 }
 
