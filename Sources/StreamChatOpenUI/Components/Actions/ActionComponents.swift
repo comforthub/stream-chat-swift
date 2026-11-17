@@ -152,9 +152,11 @@ enum AppActionLock {
         return type != BuiltinActionType.continueConversation && type != BuiltinActionType.openURL
     }
 
+    // A button written inline has no statement of its own, so its label names it instead.
     @MainActor
     private static func key(_ context: ComponentContext) -> String? {
-        context.statementId.map { prefix + $0 }
+        if let statement = context.statementId { return prefix + statement }
+        return context.props.text("label").map { prefix + "label_" + $0 }
     }
 
     // FNV-1a of the reply's program: stable across launches, unlike `hashValue`.
