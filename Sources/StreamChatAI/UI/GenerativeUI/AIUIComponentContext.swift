@@ -16,6 +16,8 @@ public struct AIUIComponentContext {
     public let isStreaming: Bool
     /// The conversation's host, for running the app's tools and opening links.
     public let host: any AIUIHosting
+    /// The form the component is placed in, or `nil` outside one or in a format without forms.
+    public let form: AIUIForm?
     private let emitEvent: @MainActor (_ event: String, _ label: String, _ payload: [String: RawJSON]) -> Void
 
     /// - Parameter emit: Sends an event to the agent the way the renderer's format does.
@@ -23,11 +25,13 @@ public struct AIUIComponentContext {
         messageID: String,
         isStreaming: Bool,
         host: any AIUIHosting,
+        form: AIUIForm? = nil,
         emit: @escaping @MainActor (_ event: String, _ label: String, _ payload: [String: RawJSON]) -> Void
     ) {
         self.messageID = messageID
         self.isStreaming = isStreaming
         self.host = host
+        self.form = form
         emitEvent = emit
     }
 

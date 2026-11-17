@@ -407,6 +407,24 @@ final class AIUIHost_Tests: XCTestCase {
         XCTAssertNil(host.state(for: "m1"))
     }
 
+    final class MemoryStateStore: AIUIStateStore {
+        var states: [String: RawJSON] = [:]
+        func state(for messageID: String) -> RawJSON? { states[messageID] }
+        func setState(_ state: RawJSON?, for messageID: String) { states[messageID] = state }
+    }
+
+    func testAReplysStateOutlivesTheHostInItsStore() {
+        let store = MemoryStateStore()
+        let first = AIUIHost(renderers: { TestRenderer() }, send: { _ in }, stateStore: store)
+        first.setState(.dictionary(["pace": .string("packed")]), for: "m1")
+
+        let second = AIUIHost(renderers: { TestRenderer() }, send: { _ in }, stateStore: store)
+
+        XCTAssertEqual(second.state(for: "m1"), .dictionary(["pace": .string("packed")]))
+        second.setState(nil, for: "m1")
+        XCTAssertNil(store.states["m1"])
+    }
+
     func testCapabilitiesListEachFormatWithTheAppsToolsAndTheAppsComponents() throws {
         let host = AIUIHost(components: [placeCard], tools: [Tool(name: "list_events"), Tool(name: "add_reminder")]) {
             TestRenderer()

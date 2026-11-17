@@ -85,26 +85,57 @@ final class OpenUIEngine: AIUIEngine {
     // The OpenUI component that shows one of the app's, with the app's view as it is.
     private func definition(of component: some AIUIComponent, schema: ComponentSchema) -> OpenUIComponentDefinition {
         OpenUIComponentDefinition(schema) { [weak self] context in
-            self?.view(of: component, in: context)
+            self.map { AppComponentView(engine: $0, component: component, context: context) }
         }
     }
 
-    private func view(of component: some AIUIComponent, in context: ComponentContext) -> (some View)? {
-        self.context(of: component, in: context).flatMap { componentContext in
-            component.view(arguments: context.props.values.rawJSON, context: componentContext)
-        }
-    }
-
-    // What one of the app's components gets besides its arguments, while the host is there.
-    private func context(of component: some AIUIComponent, in context: ComponentContext) -> AIUIComponentContext? {
+    // What one of the app's components gets besides its arguments, while the host is there:
+    // inside a `Form`, that form, so the component can hold one of its fields.
+    fileprivate func context(
+        of component: some AIUIComponent,
+        in context: ComponentContext,
+        formName: String?,
+        validation: FormValidationModel?
+    ) -> AIUIComponentContext? {
         guard let host else { return nil }
         let messageID = messageIDs[ObjectIdentifier(context.runtime)] ?? ""
         let name = component.name
-        return AIUIComponentContext(messageID: messageID, isStreaming: context.isStreaming, host: host) { event, label, payload in
+        let form = validation.map { validation in
+            Self.form(runtime: context.runtime, formName: formName, componentType: name, validation: validation)
+        }
+        return AIUIComponentContext(messageID: messageID, isStreaming: context.isStreaming, host: host, form: form) { event, label, payload in
             var payload = payload
             payload["component"] = .string(name)
             host.send(AIUIAction(messageID: messageID, format: .openUI, name: event, label: label, payload: payload))
         }
+    }
+
+    // The enclosing form, as an app's component reaches it: its values in the reply's state,
+    // where the form's own fields keep theirs, and a required field checked when it is sent.
+    private static func form(
+        runtime: OpenUIRuntime,
+        formName: String?,
+        componentType: String,
+        validation: FormValidationModel
+    ) -> AIUIForm {
+        AIUIForm(
+            value: { name in runtime.fieldValue(formName: formName, name: name)?.rawJSON },
+            setValue: { name, value in
+                runtime.setFieldValue(formName: formName, componentType: componentType, name: name, value: value?.openUIValue)
+                if value != nil { validation.clearError(name) }
+            },
+            setRequired: { name, required in
+                if required {
+                    validation.register(name, rules: [ValidationRule(type: "required")]) {
+                        runtime.fieldValue(formName: formName, name: name)
+                    }
+                } else {
+                    validation.unregister(name)
+                    validation.clearError(name)
+                }
+            },
+            error: { name in validation.error(for: name) }
+        )
     }
 
     func handle(_ event: ActionEvent, messageID: String) {
@@ -145,5 +176,21 @@ final class OpenUIEngine: AIUIEngine {
         }
         let label = event.label.isEmpty ? L10n.Action.untitled : event.label
         host.send(AIUIAction(messageID: messageID, format: .openUI, name: event.type, label: label, payload: payload))
+    }
+}
+
+// One of the app's components, given the form it is placed in.
+@available(iOS 17.0, macOS 14.0, *)
+private struct AppComponentView<Component: AIUIComponent>: View {
+    let engine: OpenUIEngine
+    let component: Component
+    let context: ComponentContext
+    @Environment(\.openUIFormName) private var formName
+    @Environment(\.openUIFormValidation) private var validation
+
+    var body: some View {
+        engine.context(of: component, in: context, formName: formName, validation: validation).flatMap { componentContext in
+            component.view(arguments: context.props.values.rawJSON, context: componentContext)
+        }
     }
 }

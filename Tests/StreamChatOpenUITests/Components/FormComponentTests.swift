@@ -179,3 +179,21 @@ struct FormComponentTests {
         #expect(runtime.fieldValue(formName: "filters", name: "price") == [200, 800])
     }
 }
+
+struct AppActionLockTests {
+    @Test func onlyAnActionForTheAppLocksItsButton() {
+        #expect(AppActionLock.isAppAction(["type": "confirm_booking"]))
+        #expect(!AppActionLock.isAppAction(["type": .string(BuiltinActionType.continueConversation)]))
+        #expect(!AppActionLock.isAppAction(["type": .string(BuiltinActionType.openURL), "url": "https://x"]))
+        #expect(!AppActionLock.isAppAction(["steps": .array([])]))
+        #expect(!AppActionLock.isAppAction(nil))
+    }
+
+    @Test func theFingerprintIsStableAndFollowsTheReply() {
+        #expect(AppActionLock.fingerprint("a") == AppActionLock.fingerprint("a"))
+        #expect(AppActionLock.fingerprint(nil) == AppActionLock.fingerprint(""))
+        #expect(AppActionLock.fingerprint("a") != AppActionLock.fingerprint("b"))
+        // FNV-1a 64 of "a".
+        #expect(AppActionLock.fingerprint("a") == "af63dc4c8601ec8c")
+    }
+}

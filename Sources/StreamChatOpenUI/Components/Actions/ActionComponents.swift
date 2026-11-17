@@ -71,6 +71,7 @@ struct ButtonComponentView: View {
         let destructive = props.string("type") == "destructive"
         let size = sizeOverride ?? props.string("size") ?? "medium"
 
+        let isSent = AppActionLock.isSent(context)
         Button(role: destructive ? .destructive : nil) {
             tap(label: label, variant: variant)
         } label: {
@@ -79,11 +80,15 @@ struct ButtonComponentView: View {
                 .lineLimit(2)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: variant == "tertiary" ? nil : .infinity)
+                .opacity(isSent ? 0 : 1)
+                .overlay {
+                    if isSent { ProgressView() }
+                }
         }
         .modifier(OpenUIButtonStyle(variant: variant))
         .tint(destructive ? theme.colors.danger : theme.colors.accent)
         .controlSize(Self.controlSize(size))
-        .disabled(context.isStreaming)
+        .disabled(context.isStreaming || isSent)
     }
 
     private func tap(label: String, variant: String) {
@@ -100,6 +105,7 @@ struct ButtonComponentView: View {
                 return
             }
         }
+        AppActionLock.markSent(context, action: action)
         context.trigger(label: label, formName: formName, action: action)
     }
 
@@ -110,6 +116,44 @@ struct ButtonComponentView: View {
         case "large": return .large
         default: return .regular
         }
+    }
+}
+
+// A button whose action goes to the app rather than the conversation, such as confirming a
+// booking, works once: it waits with a spinner until the reply is rewritten, so a second tap
+// can't send it again. The wait is kept in the reply's state, so it outlasts the view.
+@available(iOS 17.0, macOS 14.0, *)
+enum AppActionLock {
+    @MainActor
+    static func isSent(_ context: ComponentContext) -> Bool {
+        guard let key = key(context) else { return false }
+        return context.runtime.store.get(key) == .string(fingerprint(context.runtime.response))
+    }
+
+    @MainActor
+    static func markSent(_ context: ComponentContext, action: OpenUIValue?) {
+        guard isAppAction(action), let key = key(context) else { return }
+        context.runtime.store.set(key, .string(fingerprint(context.runtime.response)))
+    }
+
+    static func isAppAction(_ action: OpenUIValue?) -> Bool {
+        guard case .object(let object)? = action, object["steps"] == nil,
+              let type = object["type"]?.stringValue else { return false }
+        return type != BuiltinActionType.continueConversation && type != BuiltinActionType.openURL
+    }
+
+    @MainActor
+    private static func key(_ context: ComponentContext) -> String? {
+        context.statementId.map { "__sent_" + $0 }
+    }
+
+    // FNV-1a of the reply's program: stable across launches, unlike `hashValue`.
+    static func fingerprint(_ response: String?) -> String {
+        var hash: UInt64 = 0xcbf2_9ce4_8422_2325
+        for byte in (response ?? "").utf8 {
+            hash = (hash ^ UInt64(byte)) &* 0x0000_0100_0000_01b3
+        }
+        return String(hash, radix: 16)
     }
 }
 

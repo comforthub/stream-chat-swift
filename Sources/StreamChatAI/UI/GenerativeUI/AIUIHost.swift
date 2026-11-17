@@ -67,6 +67,7 @@ public final class AIUIHost<Renderers: AIUIRendererList>: AIUIHosting, Observabl
     private let openLink: @MainActor (URL) -> Void
     private let engines = AIUIEngines()
     private var states: [String: RawJSON] = [:]
+    private let stateStore: (any AIUIStateStore)?
     private var received: [String: AIUIDocument] = [:]
     private var lastSend: Task<Void, Never>?
 
@@ -82,18 +83,23 @@ public final class AIUIHost<Renderers: AIUIRendererList>: AIUIHosting, Observabl
     ///   - open: Opens a link from a reply's UI, such as with SwiftUI's `openURL`. By default, web
     ///     and email links open and others don't: the agent writes the links, so another could
     ///     call someone or act in another app.
+    ///   - stateStore: Keeps the state replies' UI was left in, such as a form's values, beyond
+    ///     the host, so they come back when the conversation is shown again. By default it is kept
+    ///     only while the host is.
     public init(
         components: [any AIUIComponent] = [],
         tools: [any AIClientTool] = [],
         @AIUIRendererListBuilder renderers: () -> Renderers,
         send: @escaping @MainActor (AIUIAction) async throws -> Void,
-        open: (@MainActor (URL) -> Void)? = nil
+        open: (@MainActor (URL) -> Void)? = nil,
+        stateStore: (any AIUIStateStore)? = nil
     ) {
         self.renderers = renderers()
         self.components = components
         self.tools = Dictionary(tools.map { ($0.name, $0) }, uniquingKeysWith: { first, _ in first })
         sendAction = send
         openLink = open ?? AIUILinks.openIfWebOrEmail
+        self.stateStore = stateStore
     }
 
     /// Whether one of its renderers reads `document`. The one that does can still show nothing
@@ -148,11 +154,15 @@ public final class AIUIHost<Renderers: AIUIRendererList>: AIUIHosting, Observabl
 
     /// The state a reply's UI was left in, such as a form's values, kept while the host is.
     public func state(for messageID: String) -> RawJSON? {
-        states[messageID]
+        if let state = states[messageID] { return state }
+        let stored = stateStore?.state(for: messageID)
+        states[messageID] = stored
+        return stored
     }
 
     public func setState(_ state: RawJSON?, for messageID: String) {
         states[messageID] = state
+        stateStore?.setState(state, for: messageID)
     }
 
     /// Gives its renderers the UI of the conversation's replies, oldest first, as each arrives or
